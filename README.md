@@ -162,6 +162,6 @@ Ajouter des indicateurs statistiques globaux (nombre total de supports, hauteur 
 Ajouter des filtres temporels sur les dates de mise en service.
 Améliorer les performances de chargement pour les grands volumes de données.
 Ajouter des possibilités d'exportation des données filtrées.
-Auteur
+Auteur : AGABA James
 
 Projet de cartographie et d'analyse des supports radioélectriques.
