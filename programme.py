@@ -1,3 +1,5 @@
+from dash import Dash, html, dcc
+import dash_ag_grid as dag
 import pandas as pd
 import plotly.express as px
 
@@ -33,6 +35,8 @@ ssaenpt['longitude'] = (ssaenpt['COR_NB_DG_LON'] + ssaenpt['COR_NB_MN_LON'].fill
 ssaenpt[['latitude', 'longitude']] = ssaenpt[['latitude', 'longitude']].round(6)
 ssaenpt=ssaenpt.drop(columns=['COR_NB_DG_LAT', 'COR_NB_MN_LAT', 'COR_CD_NS_LAT', 'COR_NB_SC_LAT', 'COR_NB_DG_LON', 'COR_NB_MN_LON', 'COR_NB_SC_LON', 'COR_CD_EW_LON'])
 
+
+
 ssaenpt['HAUTEUR_NUM'] = pd.to_numeric(
     ssaenpt['SUP_NM_HAUT'].astype(str).str.replace(',', '.', regex=False),
     errors='coerce'
@@ -42,6 +46,7 @@ ssaenpt['HAUTEUR_NUM'] = (
     .clip(lower=1)
     .fillna(1)
 )
+
 colonnes_texte = ssaenpt.select_dtypes(include=['object', 'string']).columns
 
 ssaenpt[colonnes_texte] = (
@@ -49,43 +54,87 @@ ssaenpt[colonnes_texte] = (
     .replace(r'^\s*$', 'Inconnu', regex=True)
     .fillna('Inconnu')
 )
-fig = px.scatter_map(
-    ssaenpt,
-    lat='latitude',
-    lon='longitude',
-    size='HAUTEUR_NUM',
-    size_max=15,
-    hover_name='ADR_LB_LIEU',
-    custom_data=[
-        'DTE_EN_SERVICE',
-        'SUP_NM_HAUT',
-        'ADR_NM_CP',
-        'TPO_LB',
-        'NAT_LB_NOM',
-        'TAE_LB',
-        'ADM_LB_NOM'
-    ],
-    title='Cartographie des supports radioélectriques'
+ssaenpt['DEPARTEMENT'] = (
+    ssaenpt['ADR_NM_CP']
+    .astype(str)
+    .str[:2]
 )
 
-fig.update_traces(
-    cluster=dict(enabled=True, maxzoom=10)
-)
 
-fig.update_layout(
-    height=800,
-    margin=dict(l=0, r=0, t=50, b=0)
-)
-fig.update_traces(
-    hovertemplate=
-    "<b>%{hovertext}</b><br>" +
-    "Date de mise en service: %{customdata[0]}<br>" +
-    "Hauteur: %{customdata[1]} m<br>" +
-    "Code postal: %{customdata[2]}<br>" +
-    "Propriétaire: %{customdata[3]}<br>" +
-    "Type de support: %{customdata[4]}<br>" +
-    "Type d'antenne: %{customdata[5]}<br>" +
-    "Exploitant: %{customdata[6]}<br>"
-)
+carte = px.scatter_map(
+        ssaenpt,
+        lat='latitude',
+        lon='longitude',
+        size='HAUTEUR_NUM',
+        size_max=15,
+        hover_name='ADR_LB_LIEU',
+        custom_data=[
+            'DTE_EN_SERVICE',
+            'SUP_NM_HAUT',
+            'ADR_NM_CP',
+            'TPO_LB',
+            'NAT_LB_NOM',
+            'TAE_LB',
+            'ADM_LB_NOM'
+        ],
+        title='Cartographie des supports radioélectriques'
+    )
 
-fig.show(renderer="browser")
+carte.update_traces(cluster=dict(enabled=True, maxzoom=10))
+carte.update_layout(height=800,margin=dict(l=0, r=0, t=50, b=0))
+
+carte.update_traces(
+        hovertemplate=
+        "<b>%{hovertext}</b><br>" +
+        "Date de mise en service: %{customdata[0]}<br>" +
+        "Hauteur: %{customdata[1]} m<br>" +
+        "Code postal: %{customdata[2]}<br>" +
+        "Propriétaire: %{customdata[3]}<br>" +
+        "Type de support: %{customdata[4]}<br>" +
+        "Type d'antenne: %{customdata[5]}<br>" +
+        "Exploitant: %{customdata[6]}<br>"
+    )
+
+
+app = Dash()
+
+fig_proprio = px.bar(
+    ssaenpt['TPO_LB'].value_counts().head(10).reset_index(),
+    x='count',
+    y='TPO_LB',
+    orientation='h',
+    title="Top 10 des propriétaires",
+    color='count',
+    color_continuous_scale='Blues'
+)
+fig_user = px.bar(
+    ssaenpt['ADM_LB_NOM'].value_counts().head(10).reset_index(),
+    x='count',
+    y='ADM_LB_NOM',
+    orientation='h',
+    title="Top 10 des Utilisateur",
+    color='count',
+    color_continuous_scale='sunset'
+)
+fig_dp = px.bar(
+    ssaenpt['DEPARTEMENT'].value_counts().head(10).reset_index(),
+    x='count',
+    y='DEPARTEMENT',
+    orientation='h',
+    title="Top 10 des départements",
+    color='count',
+    color_continuous_scale='speed'
+)
+app.layout = [
+    dag.AgGrid(
+        rowData=ssaenpt.to_dict('records'),
+        columnDefs=[{"field": i} for i in ssaenpt.columns]
+    ),
+    dcc.Graph(figure=fig_proprio),
+    dcc.Graph(figure=fig_user),
+    dcc.Graph(figure=fig_dp),
+    dcc.Graph(figure=carte)
+]
+
+
+app.run()
