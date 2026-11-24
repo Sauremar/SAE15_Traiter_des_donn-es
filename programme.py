@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc
+from dash import Dash, html, dcc, Input, Output
 import dash_ag_grid as dag
 import pandas as pd
 import plotly.express as px
@@ -95,22 +95,51 @@ carte.update_traces(
         "Exploitant: %{customdata[6]}<br>"
     )
 
-
+ssaenpt=ssaenpt.drop(columns=['STA_NM_ANFR', 'TPO_ID', 'NAT_ID', 'SUP_NM_HAUT','ADM_ID', 'TAE_ID'])
+ssaenpt=ssaenpt.rename(columns={'TPO_LB': "Proprietaire", 'NAT_LB_NOM': 'Type de support', 'ADR_LB_LIEU': 'Lieu', "ADR_NM_CP": "Code postal", "HAUTEUR_NUM": "Hauteur(m)", "TAE_LB": "Type d'antenne", "DTE_EN_SERVICE": "Date de mise en service"})
 app = Dash()
 
+df_date = ssaenpt.copy()
+
+df_date["Date de mise en service"] = pd.to_datetime(
+    df_date["Date de mise en service"],
+    errors="coerce",
+    dayfirst=True
+)
+
+df_date = df_date[
+    df_date["Date de mise en service"] >= pd.Timestamp("2020-01-01")
+]
+
+df_date = (
+    df_date.groupby("Date de mise en service")
+    .size()
+    .reset_index(name="Nombre de supports")
+    .sort_values("Date de mise en service")
+)
+
+fig_date = px.line(
+    df_date,
+    x="Date de mise en service",
+    y="Nombre de supports",
+    markers=True,
+    title="Mises en service depuis 2020"
+)
+
 fig_proprio = px.bar(
-    ssaenpt['TPO_LB'].value_counts().head(10).reset_index(),
+    ssaenpt['Proprietaire'].value_counts().head(10).reset_index(),
     x='count',
-    y='TPO_LB',
+    y='Proprietaire',
     orientation='h',
     title="Top 10 des propriétaires",
     color='count',
     color_continuous_scale='Blues'
 )
+ssaenpt=ssaenpt.rename(columns={'ADM_LB_NOM': "Utilisateur"})
 fig_user = px.bar(
-    ssaenpt['ADM_LB_NOM'].value_counts().head(10).reset_index(),
+    ssaenpt['Utilisateur'].value_counts().head(10).reset_index(),
     x='count',
-    y='ADM_LB_NOM',
+    y='Utilisateur',
     orientation='h',
     title="Top 10 des Utilisateur",
     color='count',
@@ -125,16 +154,63 @@ fig_dp = px.bar(
     color='count',
     color_continuous_scale='speed'
 )
-app.layout = [
-    dag.AgGrid(
-        rowData=ssaenpt.to_dict('records'),
-        columnDefs=[{"field": i} for i in ssaenpt.columns]
+
+app.layout = html.Div([
+
+    html.H3("Recherche dans le tableau"),
+
+    dcc.Input(
+        id="recherche-tableau",
+        type="text",
+        placeholder="🔎 Rechercher dans le tableau...",
+        debounce=True,
+        style={
+            "width": "100%",
+            "padding": "12px",
+            "marginBottom": "15px",
+            "border": "1px solid #ccc",
+            "borderRadius": "8px",
+            "fontSize": "16px"
+        }
     ),
+
+    dag.AgGrid(
+        id="tableau-donnees",
+        rowData=ssaenpt.to_dict('records'),
+        columnDefs=[{"field": i} for i in ssaenpt.columns],
+        dashGridOptions={
+            "quickFilterText": "",
+            "pagination": True,
+            "paginationPageSize": 10
+        },
+        defaultColDef={
+            "sortable": True,
+            "filter": True,
+            "resizable": True
+        },
+        style={"height": "500px", "width": "100%"}
+    ),
+
     dcc.Graph(figure=fig_proprio),
     dcc.Graph(figure=fig_user),
     dcc.Graph(figure=fig_dp),
-    dcc.Graph(figure=carte)
-]
+    dcc.Graph(figure=fig_date)
+])
+@app.callback(
+    Output("tableau-donnees", "dashGridOptions"),
+    Input("recherche-tableau", "value"),
+    prevent_initial_call=False
+)
+def filtrer_tableau(valeur_recherche):
 
+    return {
+        "quickFilterText": valeur_recherche or "",
+        "pagination": True,
+        "paginationPageSize": 10
+    }
 
+def filtrer_tableau(valeur_recherche):
+    return {"quickFilterText": valeur_recherche or ""}
+
+carte.show(renderer="browser")
 app.run()
